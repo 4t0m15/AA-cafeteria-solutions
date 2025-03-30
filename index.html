@@ -519,6 +519,22 @@
             box-shadow: none;
         }
 
+        .form-select {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+        }
+
         .mobile-toggle {
             display: none;
             position: fixed;
@@ -645,6 +661,15 @@
             .search-box h2 {
                 font-size: 1rem;
             }
+            
+            .form-group {
+                margin-bottom: 0.5rem;
+            }
+            
+            .form-select {
+                padding: 8px 10px;
+                font-size: 0.85rem;
+            }
         }
     </style>
 </head>
@@ -690,6 +715,14 @@
                             <button onclick="findRecyclingCenters()"><i class="fas fa-search"></i></button>
         </div>
                     </div>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label for="locationType">Filter by Location Type</label>
+                        <select id="locationType" class="form-select" onchange="filterResults()">
+                            <option value="all">Show All Locations</option>
+                            <option value="food_bank">Food Banks Only</option>
+                            <option value="recycling">Recycling Centers Only</option>
+                        </select>
+                    </div>
                 </div>
             <div class="results" id="results">
                     <div class="no-results">
@@ -725,6 +758,7 @@
         });
         var markers = [];
         var currentSearchType = 'all';
+        var displayedLocations = []; // To store the currently displayed locations
 
         // Add OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1272,11 +1306,24 @@
             // Geocode the location
             geocodeLocation(zip)
                 .then(userLocation => {
-                    // Find nearby food banks (if data is available)
-                    findFoodBanksNear(userLocation);
+                    // Get the current filter type
+                    currentSearchType = document.getElementById('locationType').value;
                     
-                    // Find nearby recycling centers
-                    findRecyclingCentersNear(userLocation);
+                    // Find nearby food banks (if data is available and filter allows)
+                    if (currentSearchType === 'all' || currentSearchType === 'food_bank') {
+                        findFoodBanksNear(userLocation);
+                    } else {
+                        // If only showing recycling, display combined results anyway
+                        displayCombinedResults();
+                    }
+                    
+                    // Find nearby recycling centers (if filter allows)
+                    if (currentSearchType === 'all' || currentSearchType === 'recycling') {
+                        findRecyclingCentersNear(userLocation);
+                    } else {
+                        // If only showing food banks, display combined results anyway
+                        displayCombinedResults();
+                    }
                 })
                 .catch(error => {
                     console.error("Search error:", error);
@@ -1487,6 +1534,9 @@
 
         // Add food bank markers to the map
         function addFoodBankMarkers(locations) {
+            // Skip if we're only showing recycling centers
+            if (currentSearchType === 'recycling') return;
+            
             locations.forEach(location => {
                 const marker = L.marker([location.lat, location.lng], {
                     icon: L.divIcon({
@@ -1519,6 +1569,9 @@
 
         // Add recycling center markers to the map
         function addRecyclingMarkers(locations) {
+            // Skip if we're only showing food banks
+            if (currentSearchType === 'food_bank') return;
+            
             locations.forEach(location => {
                 const marker = L.marker([location.lat, location.lng], {
                     icon: L.divIcon({
@@ -1553,8 +1606,21 @@
             const resultsContainer = document.getElementById('results');
             let paginationContainer = null;
 
-            // Get all locations
-            const allLocations = [...foodBankLocationsFound, ...recyclingCentersFound].sort((a, b) => a.distance - b.distance);
+            // Get all locations based on filter
+            let allLocations = [];
+            if (currentSearchType === 'all') {
+                allLocations = [...foodBankLocationsFound, ...recyclingCentersFound];
+            } else if (currentSearchType === 'food_bank') {
+                allLocations = [...foodBankLocationsFound];
+            } else if (currentSearchType === 'recycling') {
+                allLocations = [...recyclingCentersFound];
+            }
+            
+            // Sort by distance
+            allLocations.sort((a, b) => a.distance - b.distance);
+            
+            // Store the currently displayed locations
+            displayedLocations = allLocations;
 
             // If we have no results yet, don't display an error
             if (allLocations.length === 0 && resultsContainer.querySelector('.loader')) {
@@ -1567,7 +1633,9 @@
                 resultsContainer.innerHTML = `
                     <div class="no-results">
                         <i class="fas fa-search"></i>
-                        <p>No locations found nearby. Try increasing your search radius or searching in a different location.</p>
+                        <p>No ${currentSearchType === 'all' ? 'locations' : 
+                           currentSearchType === 'food_bank' ? 'food banks' : 'recycling centers'} 
+                           found nearby. Try increasing your search radius or searching in a different location.</p>
                     </div>`;
                 return;
             }
@@ -1841,6 +1909,26 @@
 
         function deg2rad(deg) {
             return deg * (Math.PI/180);
+        }
+
+        function filterResults() {
+            const selectedType = document.getElementById('locationType').value;
+            currentSearchType = selectedType;
+            
+            // Clear existing markers
+            clearMarkers();
+            
+            // Redisplay the appropriate markers
+            if (currentSearchType === 'all' || currentSearchType === 'food_bank') {
+                addFoodBankMarkers(foodBankLocationsFound);
+            }
+            
+            if (currentSearchType === 'all' || currentSearchType === 'recycling') {
+                addRecyclingMarkers(recyclingCentersFound);
+            }
+            
+            // Update the results list
+            displayCombinedResults();
         }
     </script>
 
