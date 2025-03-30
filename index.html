@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Bank & Recycling Finder</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #00b894;
+            --background: #f5f6fa;
+            --card: #ffffff;
+            --text: #2d3436;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --error: #e74c3c;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body { 
+            background: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .search-box {
+            background: var(--card);
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        input {
+            flex: 1;
+            padding: 0.8rem;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        #map {
+            height: 600px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .results {
+            background: var(--card);
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .result-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            transition: transform 0.2s ease;
+            border-left: 4px solid var(--primary);
+            cursor: pointer;
+        }
+
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+            background: #f0f2f5;
+        }
+        
+        .result-item.highlighted {
+            background: rgba(0, 184, 148, 0.1);
+            border-left: 4px solid var(--primary);
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+        }
+
+        .result-item h3 {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--primary);
+        }
+
+        .result-item button {
+            margin-top: 0.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .result-item button:hover {
+            opacity: 0.9;
+        }
+        
+        .popup-content {
+            min-width: 200px;
+        }
+        
+        .popup-content h3 {
+            color: var(--primary);
+            margin-bottom: 5px;
+            font-size: 1rem;
+        }
+        
+        .popup-content p {
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+        
+        .popup-content button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 5px;
+            display: block;
+            width: 100%;
+        }
+        
+        .popup-content a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .popup-content a:hover {
+            text-decoration: underline;
+        }
+
+        .error {
+            color: var(--error);
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+
+            #map {
+                height: 400px;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        .items-list {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .items-list li {
+            margin-bottom: 2px;
+        }
+        
+        .food-bank-type {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            background-color: rgba(0, 184, 148, 0.1);
+            color: var(--primary);
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>UK Food Bank Finder</h1>
+            <p>Find food banks near you and see what items they need for donation</p>
+            <small style="color: rgba(255,255,255,0.8);">Data loaded from food banks database</small>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-box">
+            <input type="text" id="zipCode" placeholder="Enter UK location (e.g., 'London', 'Manchester', 'Edinburgh')" />
+            <button onclick="findRecyclingCenters()">
+                <i class="fas fa-search"></i> Search
+            </button>
+        </div>
+
+        <div class="content">
+            <div id="map"></div>
+            <div class="results" id="results">
+                <p>Enter a location to see nearby food banks and recycling centers</p>
+                <div class="note" style="margin-top: 20px; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #00b894; border-radius: 4px;">
+                    <h4 style="margin-bottom: 5px;">How to Use:</h4>
+                    <p>1. Enter a location name like "London", "Manchester", or "Glasgow"</p>
+                    <p>2. The map will show food banks near that location</p>
+                    <p>3. Click on a location to see details about items needed for donation</p>
+                    <p><strong>Food bank database loaded:</strong> ${Object.keys(foodBankData).length} locations available</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map = null;
+        let markers = [];
+        let foodBankData = {};
+
+        // Initialize map
+        function initMap() {
+            if (map) map.remove();
+            map = L.map('map').setView([54.0, -2.0], 6); // Center on UK initially
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            loadFoodBankData();
+        });
+
+        // Load food bank data from JSON file
+        function loadFoodBankData() {
+            // Show loading message
+            document.getElementById("results").innerHTML = '<p>Loading food bank data...</p>';
+            
+            // Define the fallback data in case everything fails
+            const fallbackData = {
+                "London Colney - Temporary": {
+                    "address": "Caledon Community Centre, Caledon Rd, London Colney, St Albans AL2 1PU",
+                    "latitude": "51.7228722",
+                    "longitude": "-0.2996495",
+                    "website": "http://stalbansdistrict.foodbank.org.uk/",
+                    "items_needed": [
+                        "Pasta",
+                        "Milk (long life)",
+                        "Fruit Juice (long life)",
+                        "Instant Mash/Tinned Potatoes",
+                        "Tinned Soup",
+                        "Dried Noodles",
+                        "Jam & Spreads"
+                    ],
+                    "location_type": "food_bank_centre",
+                    "parent_food_bank": "St Albans and District Foodbank"
+                },
+                "Mowbray Community Church, Harrogate": {
+                    "address": "1 Westmoreland St, Harrogate HG1 5AY, UK",
+                    "latitude": "53.99702063265868",
+                    "longitude": "-1.5303109043686618",
+                    "website": "http://harrogatedistrict.foodbank.org.uk/",
+                    "items_needed": [
+                        "Long Life Fruit Juice",
+                        "Long Life Milk",
+                        "Pasta Sauce",
+                        "Chocolate",
+                        "Sponge Puddings"
+                    ],
+                    "location_type": "food_bank_centre",
+                    "parent_food_bank": "Harrogate District Foodbank"
+                }
+            };
+            
+            // Fetch the JSON file
+            fetch('food_banks.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to load data: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Store the data
+                    foodBankData = data;
+                    
+                    // Check if data is empty or invalid
+                    if (!foodBankData || Object.keys(foodBankData).length === 0) {
+                        console.warn("Loaded data was empty, using fallback data");
+                        foodBankData = fallbackData;
+                    }
+                    
+                    // Normalize the data format
+                    normalizeData();
+                    
+                    // Update UI
+                    document.getElementById("results").innerHTML = `
+                        <p>Enter a location to see nearby food banks and recycling centers</p>
+                        <div class="note" style="margin-top: 20px; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #00b894; border-radius: 4px;">
+                            <h4 style="margin-bottom: 5px;">How to Use:</h4>
+                            <p>1. Enter a location name like "London", "Manchester", or "Glasgow"</p>
+                            <p>2. The map will show food banks near that location</p>
+                            <p>3. Click on a location to see details about items needed for donation</p>
+                            <p><strong>Food bank database loaded:</strong> ${Object.keys(foodBankData).length} locations available</p>
+                        </div>
+                    `;
+                    
+                    console.log("Food bank data loaded successfully", Object.keys(foodBankData).length, "locations");
+                })
+                .catch(error => {
+                    console.error("Error loading food bank data:", error);
+                    document.getElementById("results").innerHTML = `
+                        <p class="error"><i class="fas fa-exclamation-circle"></i> Error loading food bank data: ${error.message}</p>
+                        <p>Falling back to sample data...</p>
+                    `;
+                    
+                    // Fall back to sample data
+                    foodBankData = fallbackData;
+                    normalizeData();
+                    
+                    document.getElementById("results").innerHTML = `
+                        <p>Enter a location to see nearby food banks</p>
+                        <div class="note" style="margin-top: 20px; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #00b894; border-radius: 4px;">
+                            <h4 style="margin-bottom: 5px;">How to Use:</h4>
+                            <p>1. Enter a location name like "London", "Manchester", or "Glasgow"</p>
+                            <p>2. The map will show food banks near that location</p>
+                            <p>3. Click on a location to see details about items needed for donation</p>
+                            <p><strong>Food bank database loaded:</strong> ${Object.keys(foodBankData).length} locations available</p>
+                        </div>
+                    `;
+                });
+        }
+
+        // Modified function to handle errors in website URLs
+        function normalizeData() {
+            // Ensure all food bank entries have consistent format for items_needed
+            let skipped = 0;
+            
+            for (const [name, data] of Object.entries(foodBankData)) {
+                try {
+                    // Convert string items to array if needed
+                    if (data.items_needed) {
+                        if (typeof data.items_needed === 'string') {
+                            // Split by comma if it's a comma-separated string
+                            data.items_needed = data.items_needed.split(',').map(item => item.trim());
+                        } else if (!Array.isArray(data.items_needed)) {
+                            // Convert to array with single item for any other type
+                            data.items_needed = [String(data.items_needed)];
+                        }
+                    } else {
+                        // Provide default if missing
+                        data.items_needed = ['No specific items listed'];
+                    }
+                    
+                    // Ensure latitude and longitude are properly formatted
+                    if (data.latitude && typeof data.latitude === 'string') {
+                        data.latitude = parseFloat(data.latitude);
+                    }
+                    
+                    if (data.longitude && typeof data.longitude === 'string') {
+                        data.longitude = parseFloat(data.longitude);
+                    }
+                    
+                    // Skip invalid entries
+                    if (isNaN(data.latitude) || isNaN(data.longitude)) {
+                        console.warn(`Skipping ${name} due to invalid coordinates`);
+                        continue;
+                    }
+                    
+                    // Ensure other required fields
+                    if (!data.address) data.address = 'Address not available';
+                    if (!data.location_type) data.location_type = 'Food Bank';
+                    
+                    // Ensure website is properly formatted
+                    if (data.website && typeof data.website === 'string') {
+                        // Fix escaped slashes in URLs
+                        data.website = data.website.replace(/\\\//g, '/');
+                    }
+                } catch (e) {
+                    console.warn(`Error normalizing data for ${name}:`, e);
+                    skipped++;
+                }
+            }
+            
+            if (skipped > 0) {
+                console.warn(`Skipped normalizing ${skipped} entries due to errors`);
+            }
+        }
+
+        function findRecyclingCenters() {
+            const zip = document.getElementById("zipCode").value.trim();
+            if (!zip) {
+                document.getElementById("results").innerHTML = `
+                    <p class="error"><i class="fas fa-exclamation-circle"></i> Please enter a location name</p>
+                    <p>Try searching for a city like "London", "Manchester", or "Edinburgh".</p>
+                `;
+                return;
+            }
+
+            // Clear previous results
+            document.getElementById("results").innerHTML = '<p>Searching...</p>';
+            markers.forEach(marker => marker.remove());
+            markers = [];
+
+            // Get location from location name
+            fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(zip)}&format=json&limit=1`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network error: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data || !data.length) {
+                        throw new Error("Location not found. Please try a different city or location name.");
+                    }
+                    
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    
+                    if (isNaN(lat) || isNaN(lon)) {
+                        throw new Error("Invalid coordinates returned. Please try a different location.");
+                    }
+                    
+                    const location = {
+                        lat: lat,
+                        lon: lon,
+                        displayName: data[0].display_name
+                    };
+                    
+                    return searchNearbyLocations(location);
+                })
+                .catch(error => {
+                    console.error("Search error:", error);
+                    document.getElementById("results").innerHTML = `
+                        <p class="error"><i class="fas fa-exclamation-circle"></i> ${error.message}</p>
+                        <p>Try entering a specific city name like "London" or "Manchester".</p>
+                        <p>Make sure your internet connection is working properly.</p>
+                    `;
+                });
+        }
+
+        function searchNearbyLocations(location) {
+            // Check if food bank data is loaded
+            if (!foodBankData || Object.keys(foodBankData).length === 0) {
+                document.getElementById("results").innerHTML = 
+                    `<p>No food bank data is available. Please refresh the page and try again.</p>`;
+                return;
+            }
+
+            // Find locations within search radius (kilometers)
+            const MAX_DISTANCE = 30; // km - increased from original to show more results
+            const locations = [];
+            let totalLocations = 0;
+
+            for (const [name, data] of Object.entries(foodBankData)) {
+                totalLocations++;
+                
+                // Skip entries without valid coordinates
+                if (!data.latitude || !data.longitude || 
+                    isNaN(parseFloat(data.latitude)) || isNaN(parseFloat(data.longitude))) {
+                    continue;
+                }
+                
+                try {
+                    const distance = calculateDistance(
+                        location.lat, location.lon, 
+                        parseFloat(data.latitude), parseFloat(data.longitude)
+                    );
+                    
+                    if (distance <= MAX_DISTANCE) {
+                        locations.push({
+                            name: name,
+                            data: data,
+                            distance: distance
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Error calculating distance for ${name}:`, error);
+                }
+            }
+
+            // Sort by distance
+            locations.sort((a, b) => a.distance - b.distance);
+            
+            // Limit to max 100 results for performance
+            const limitedLocations = locations.slice(0, 100);
+            
+            console.log(`Found ${locations.length} locations within ${MAX_DISTANCE}km of ${location.displayName}`);
+            
+            displayResults(limitedLocations, location, totalLocations, MAX_DISTANCE);
+        }
+
+        function displayResults(locations, userLocation, totalLocations, MAX_DISTANCE) {
+            // Center map on user location
+            map.setView([userLocation.lat, userLocation.lon], 10);
+
+            // Add user marker
+            markers.push(
+                L.marker([userLocation.lat, userLocation.lon])
+                    .addTo(map)
+                    .bindPopup(`<b>Your Location</b><br>${userLocation.displayName || 'Searched location'}`)
+            );
+
+            // Display results
+            const resultsDiv = document.getElementById("results");
+            
+            if (locations.length === 0) {
+                resultsDiv.innerHTML = `
+                    <h2>No Food Banks Found Nearby</h2>
+                    <p>We couldn't find any food banks within ${MAX_DISTANCE}km of your location.</p>
+                    <p>Try searching for a different location or city center.</p>
+                    <p><small>Database contains ${totalLocations} locations total.</small></p>
+                `;
+                return;
+            }
+            
+            const searchTerm = document.getElementById('zipCode').value || 'your location';
+            
+            resultsDiv.innerHTML = `
+                <h2>Found ${locations.length} Food Banks Near ${userLocation.displayName || searchTerm}</h2>
+                <p>Showing locations within ${MAX_DISTANCE}km of your search location</p>
+                <div id="results-list"></div>
+            `;
+            
+            const resultsListDiv = document.getElementById('results-list');
+
+            locations.forEach((location, index) => {
+                const { name, data, distance } = location;
+                const lat = parseFloat(data.latitude);
+                const lon = parseFloat(data.longitude);
+                const locationId = `location-${index}`;
+
+                // Create detailed popup content with proper styling
+                const popupContent = `
+                    <div class="popup-content">
+                        <h3>${name}</h3>
+                        <p><strong>Type:</strong> ${data.location_type}</p>
+                        <p><strong>Address:</strong> ${data.address || 'Not available'}</p>
+                        <p><strong>Distance:</strong> ${distance.toFixed(2)} km</p>
+                        ${data.items_needed && data.items_needed.length ? 
+                            `<p><strong>Needs:</strong> ${data.items_needed.slice(0, 3).join(', ')}${data.items_needed.length > 3 ? '...' : ''}</p>` : ''}
+                        ${data.website ? `<p><a href="${data.website}" target="_blank">Visit Website</a></p>` : ''}
+                        <button onclick="document.getElementById('${locationId}').scrollIntoView({behavior: 'smooth'})">
+                            View Details
+                        </button>
+                    </div>
+                `;
+
+                // Add marker with enhanced popup
+                const marker = L.marker([lat, lon])
+                    .addTo(map)
+                    .bindPopup(popupContent);
+                
+                // Add click handler for the marker
+                marker.on('click', function() {
+                    // Highlight the corresponding list item
+                    const listItem = document.getElementById(locationId);
+                    if (listItem) {
+                        // Remove highlight from all items
+                        const items = document.querySelectorAll('.result-item');
+                        items.forEach(item => item.classList.remove('highlighted'));
+                        
+                        // Add highlight to this item
+                        listItem.classList.add('highlighted');
+                        listItem.scrollIntoView({behavior: 'smooth'});
+                    }
+                });
+                
+                markers.push(marker);
+
+                // Create result item
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.id = locationId;
+                
+                let itemsNeededHTML = '';
+                if (data.items_needed && data.items_needed.length) {
+                    // Limit to 10 items to prevent overwhelming the UI
+                    const displayItems = data.items_needed.slice(0, 10);
+                    const hasMoreItems = data.items_needed.length > 10;
+                    
+                    itemsNeededHTML = `
+                        <h4>Items Needed:</h4>
+                        <ul class="items-list">
+                            ${displayItems.map(item => `<li>${item}</li>`).join('')}
+                            ${hasMoreItems ? `<li><i>...and ${data.items_needed.length - 10} more items</i></li>` : ''}
+                        </ul>
+                    `;
+                }
+                
+                resultItem.innerHTML = `
+                    <h3>
+                        <i class="fas fa-shopping-basket"></i> ${name}
+                        <span class="food-bank-type">${data.location_type}</span>
+                    </h3>
+                    <p><strong>Distance:</strong> ${distance.toFixed(2)} km</p>
+                    <p><strong>Address:</strong> ${data.address || 'Not available'}</p>
+                    ${data.website ? `<p><strong>Website:</strong> <a href="${data.website.replace(/\\\//g, '/')}" target="_blank">${data.website.replace(/\\\//g, '/')}</a></p>` : ''}
+                    ${data.parent_food_bank ? `<p><strong>Part of:</strong> ${data.parent_food_bank}</p>` : ''}
+                    ${itemsNeededHTML}
+                    <button onclick="centerMapOn(${lat}, ${lon}, '${name.replace(/'/g, "\\'")}')">View on Map</button>
+                `;
+                
+                // Add click event to the result item
+                resultItem.addEventListener('click', function() {
+                    // Remove highlight from all items
+                    const items = document.querySelectorAll('.result-item');
+                    items.forEach(item => item.classList.remove('highlighted'));
+                    
+                    // Add highlight to this item
+                    this.classList.add('highlighted');
+                });
+                
+                resultsListDiv.appendChild(resultItem);
+            });
+        }
+
+        function centerMapOn(lat, lon, name) {
+            map.setView([lat, lon], 14);
+            
+            // Find and open the marker popup for this location
+            markers.forEach(marker => {
+                const markerLatLng = marker.getLatLng();
+                if (markerLatLng.lat === lat && markerLatLng.lng === lon) {
+                    marker.openPopup();
+                }
+            });
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            const distance = R * c; // Distance in km
+            return distance;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+
+        // Handle Enter key
+        document.getElementById('zipCode').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') findRecyclingCenters();
+        });
+    </script>
+</body>
+</html>
